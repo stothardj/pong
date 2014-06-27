@@ -14,18 +14,25 @@
 (def screen-bounds-x [0 (first (:screen-dimensions params))])
 (def screen-bounds-y [0 (second (:screen-dimensions params))])
 
-(def left-paddle-location (atom [20 190]))
-(def right-paddle-location (atom [(- (first (:screen-dimensions params)) 20) 190]))
+(def left-paddle (atom {:x 20
+                        :y 190
+                        :width (:paddle-width params)
+                        :height (:paddle-height params)}))
+(def right-paddle (atom {:x (- (first (:screen-dimensions params)) 20)
+                         :y 190
+                         :width (:paddle-width params)
+                         :height (:paddle-height params)}))
+
+(defn set-location [m loc]
+  "Set the x and y values in map m to the location"
+  (apply (partial assoc m) (interleave [:x :y] loc)))
 
 (def left-score (atom 0))
 (def right-score (atom 0))
 
 (def paddles
-  {:left left-paddle-location
-   :right right-paddle-location})
-
-(def paddle-bounds-x [0 (:paddle-width params)])
-(def paddle-bounds-y [0 (:paddle-height params)])
+  {:left left-paddle
+   :right right-paddle})
 
 (defn rand-angle []
   (rand (* 2 Math/PI)))
@@ -54,17 +61,16 @@
   (no-stroke)
   (frame-rate 30))
 
-(defn draw-paddle [paddle]
-  (let [[px py] paddle]
-    (rect px py (:paddle-width params) (:paddle-height params))))
 
 (defn draw
   []
   (let [{[ballx bally] :location} @ball]
     (background-float (params :background-colour))
     (fill (params :foreground-colour))
-    (draw-paddle @left-paddle-location)
-    (draw-paddle @right-paddle-location)
+    (doseq [paddle (vals paddles)]
+      (->> @paddle
+           ((juxt :x :y :width :height))
+           (apply rect)))
     (rect ballx bally (:ball-radius params) (:ball-radius params))
     (text "Use WS and arrow keys to move" 10 390)
     (text (str @left-score) 20 20)
@@ -102,10 +108,12 @@
   (let [paddle (paddles paddle-side)
         valid-key (valid-keys paddle-side)
         move (moves (get valid-key the-key-pressed :still))]
-    (swap! paddle (partial change-location move))
-    (swap! paddle (partial normalise
-                           (map - screen-bounds-x paddle-bounds-x)
-                           (map - screen-bounds-y paddle-bounds-y)))))
+    (swap! paddle #(set-location % (change-location move ((juxt :x :y) %))))
+    (swap! paddle #(set-location %
+                                 (normalise
+                                  (map - screen-bounds-x [0 (:width %)])
+                                  (map - screen-bounds-y [0 (:height %)])
+                                  ((juxt :x :y) %))))))
 
 (defn key-press []
   (let [raw-key (raw-key)
@@ -147,11 +155,9 @@
 (defn bounce-paddle [m]
   "Changes direction based on paddle collided with."
   (let [[dx] (calc-ball-delta m)
-        paddle-left @left-paddle-location
-        paddle-right @right-paddle-location
         ball-rect (concat (:location m) (repeat 2 (:ball-radius params)))
-        paddle-left-rect (concat paddle-left [(:paddle-width params) (:paddle-height params)])
-        paddle-right-rect (concat paddle-right [(:paddle-width params) (:paddle-height params)])]
+        paddle-left-rect ((juxt :x :y :width :height) @left-paddle)
+        paddle-right-rect ((juxt :x :y :width :height) @right-paddle)]
     (if (or (and (< dx 0) (overlap-rects? ball-rect paddle-left-rect))
             (and (> dx 0) (overlap-rects? ball-rect paddle-right-rect)))
       (update-in m [:angle] #(- (+ % Math/PI)))
