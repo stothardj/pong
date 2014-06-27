@@ -23,6 +23,9 @@
                          :width (:paddle-width params)
                          :height (:paddle-height params)}))
 
+(def bounds-x (juxt :x #(->> % ((juxt :x :width)) (reduce +))))
+(def bounds-y (juxt :y #(->> % ((juxt :y :height)) (reduce +))))
+
 (def loc (juxt :x :y))
 (defn set-loc [m loc]
   "Set the x and y values in map m to the location"
@@ -44,7 +47,10 @@
   (rand (* 2 Math/PI)))
 
 (defn new-ball []
-  {:box {:x 200 :y 200 :width (:ball-radius params) :height (:ball-radius params)}
+  {:x 200
+   :y 200
+   :width (:ball-radius params)
+   :height (:ball-radius params)
    :speed 2
    :angle (rand-angle)})
 
@@ -75,7 +81,7 @@
     (->> @paddle
          ((juxt :x :y :width :height))
          (apply rect)))
-  (->> (:box @ball)
+  (->> @ball
        ((juxt :x :y :width :height))
        (apply rect))
   (text "Use WS and arrow keys to move" 10 390)
@@ -126,15 +132,15 @@
 
 (defn move [m]
   "Changes location based on speed and angle."
-  (update-in m [:box] #(update-loc % (calc-ball-delta m))))
+  (update-loc m (calc-ball-delta m)))
 
 (defn bounce-wall [m]
   "Changes direction based on wall collided with."
   (let [[_ dy] (calc-ball-delta m)
-        y (get-in m [:box :y])
+        y (:y m)
         [mn mx] screen-bounds-y]
-    (if
-        (or (and (< y mn) (< dy 0)) (and (> y mx) (> dy 0)))
+    (if (or (and (< y mn) (< dy 0))
+            (and (> y mx) (> dy 0)))
       (update-in m [:angle] -)
       m)))
 
@@ -147,28 +153,22 @@
     (not (or (< ae bs) (< be as)))))
 
 (defn overlap-rects?
-  "Return true if two rects overlap at all.
-   rect is [left top width height]"
+  "Return true if two rects overlap at all."
   [a b]
-  (let [[al at aw ah] a
-        [bl bt bw bh] b]
-    (and (overlap-ranges? [al (+ al aw)] [bl (+ bl bw)])
-         (overlap-ranges? [at (+ at ah)] [bt (+ bt bh)]))))
+  (and (overlap-ranges? (bounds-x a) (bounds-x b))
+       (overlap-ranges? (bounds-y a) (bounds-y b))))
 
 (defn bounce-paddle [m]
   "Changes direction based on paddle collided with."
-  (let [[dx] (calc-ball-delta m)
-        ball-rect ((juxt :x :y :width :height) (:box @ball))
-        paddle-left-rect ((juxt :x :y :width :height) @left-paddle)
-        paddle-right-rect ((juxt :x :y :width :height) @right-paddle)]
-    (if (or (and (< dx 0) (overlap-rects? ball-rect paddle-left-rect))
-            (and (> dx 0) (overlap-rects? ball-rect paddle-right-rect)))
+  (let [[dx] (calc-ball-delta m)]
+    (if (or (and (< dx 0) (overlap-rects? @ball @left-paddle))
+            (and (> dx 0) (overlap-rects? @ball @right-paddle)))
       (update-in m [:angle] #(- (+ % Math/PI)))
       m)))
 
 (defn maybe-reset-ball [m]
   "Put the ball back in the center if it's offscreen."
-  (let [x (get-in m [:box :x])
+  (let [x (:x m)
         [mn mx] screen-bounds-x]
     (cond (< x mn) (do (swap! right-score inc) (new-ball))
           (> x mx) (do (swap! left-score inc) (new-ball))
@@ -188,7 +188,7 @@
                                      20
                                      TimeUnit/MILLISECONDS)]
     (defsketch key-listener
-      :title "Keyboard arrow keys demo"
+      :title "Pong"
       :size (params :screen-dimensions)
       :setup setup
       :draw draw
