@@ -23,9 +23,15 @@
                          :width (:paddle-width params)
                          :height (:paddle-height params)}))
 
-(defn set-location [m loc]
+(def loc (juxt :x :y))
+(defn set-loc [m loc]
   "Set the x and y values in map m to the location"
   (apply (partial assoc m) (interleave [:x :y] loc)))
+(defn update-loc [m delta]
+  "Update the x and y values in map m by adding delta"
+  (->> (interleave [:x :y] delta)
+       (partition 2)
+       (reduce #(update-in % [(first %2)] + (second %2)) m)))
 
 (def left-score (atom 0))
 (def right-score (atom 0))
@@ -38,7 +44,7 @@
   (rand (* 2 Math/PI)))
 
 (defn new-ball []
-  {:location [200 200]
+  {:box {:x 200 :y 200 :width (:ball-radius params) :height (:ball-radius params)}
    :speed 2
    :angle (rand-angle)})
 
@@ -61,20 +67,20 @@
   (no-stroke)
   (frame-rate 30))
 
-
 (defn draw
   []
-  (let [{[ballx bally] :location} @ball]
-    (background-float (params :background-colour))
-    (fill (params :foreground-colour))
-    (doseq [paddle (vals paddles)]
-      (->> @paddle
-           ((juxt :x :y :width :height))
-           (apply rect)))
-    (rect ballx bally (:ball-radius params) (:ball-radius params))
-    (text "Use WS and arrow keys to move" 10 390)
-    (text (str @left-score) 20 20)
-    (text (str @right-score) (- (second screen-bounds-x) 20) 20)))
+  (background-float (params :background-colour))
+  (fill (params :foreground-colour))
+  (doseq [paddle (vals paddles)]
+    (->> @paddle
+         ((juxt :x :y :width :height))
+         (apply rect)))
+  (->> (:box @ball)
+       ((juxt :x :y :width :height))
+       (apply rect))
+  (text "Use WS and arrow keys to move" 10 390)
+  (text (str @left-score) 20 20)
+  (text (str @right-score) (- (second screen-bounds-x) 20) 20))
 
 (def valid-keys-left {\w :up
                       \s :down})
@@ -101,19 +107,16 @@
 
 (defn calc-ball-delta [m] (apply calc-delta ((juxt :speed :angle) m)))
 
-(defn change-location [delta current-position]
-  (map #(reduce + %) (split-at 2 (interleave delta current-position))))
-
 (defn maybe-move [paddle-side the-key-pressed]
   (let [paddle (paddles paddle-side)
         valid-key (valid-keys paddle-side)
         move (moves (get valid-key the-key-pressed :still))]
-    (swap! paddle #(set-location % (change-location move ((juxt :x :y) %))))
-    (swap! paddle #(set-location %
-                                 (normalise
-                                  (map - screen-bounds-x [0 (:width %)])
-                                  (map - screen-bounds-y [0 (:height %)])
-                                  ((juxt :x :y) %))))))
+    (swap! paddle #(update-loc % move))
+    (swap! paddle #(set-loc %
+                            (normalise
+                             (map - screen-bounds-x [0 (:width %)])
+                             (map - screen-bounds-y [0 (:height %)])
+                             (loc %))))))
 
 (defn key-press []
   (let [raw-key (raw-key)
@@ -123,12 +126,12 @@
 
 (defn move [m]
   "Changes location based on speed and angle."
-  (update-in m [:location] change-location (calc-ball-delta m)))
+  (update-in m [:box] #(update-loc % (calc-ball-delta m))))
 
 (defn bounce-wall [m]
   "Changes direction based on wall collided with."
   (let [[_ dy] (calc-ball-delta m)
-        [_ y] (:location m)
+        y (get-in m [:box :y])
         [mn mx] screen-bounds-y]
     (if
         (or (and (< y mn) (< dy 0)) (and (> y mx) (> dy 0)))
@@ -155,7 +158,7 @@
 (defn bounce-paddle [m]
   "Changes direction based on paddle collided with."
   (let [[dx] (calc-ball-delta m)
-        ball-rect (concat (:location m) (repeat 2 (:ball-radius params)))
+        ball-rect ((juxt :x :y :width :height) (:box @ball))
         paddle-left-rect ((juxt :x :y :width :height) @left-paddle)
         paddle-right-rect ((juxt :x :y :width :height) @right-paddle)]
     (if (or (and (< dx 0) (overlap-rects? ball-rect paddle-left-rect))
@@ -165,7 +168,7 @@
 
 (defn maybe-reset-ball [m]
   "Put the ball back in the center if it's offscreen."
-  (let [[x] (:location m)
+  (let [x (get-in m [:box :x])
         [mn mx] screen-bounds-x]
     (cond (< x mn) (do (swap! right-score inc) (new-ball))
           (> x mx) (do (swap! left-score inc) (new-ball))
