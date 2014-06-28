@@ -9,7 +9,9 @@
              :foreground-colour 255
              :paddle-height 50
              :paddle-width 5
-             :ball-radius 4})
+             :ball-radius 4
+             :start-speed 2
+             :speed-bump 0.3})
 
 (def screen-bounds-x [0 (first (:screen-dimensions params))])
 (def screen-bounds-y [0 (second (:screen-dimensions params))])
@@ -25,6 +27,9 @@
 
 (def bounds-x (juxt :x #(->> % ((juxt :x :width)) (reduce +))))
 (def bounds-y (juxt :y #(->> % ((juxt :y :height)) (reduce +))))
+(defn center-y [rect]
+  "Return the y coordinate of the center of a rectangle"
+  (->> rect bounds-y (reduce +) (* 0.5)))
 
 (def loc (juxt :x :y))
 (defn set-loc [m loc]
@@ -51,7 +56,7 @@
    :y 200
    :width (:ball-radius params)
    :height (:ball-radius params)
-   :speed 2
+   :speed (:start-speed params)
    :angle (rand-angle)})
 
 (def ball (atom (new-ball)))
@@ -141,7 +146,9 @@
         [mn mx] screen-bounds-y]
     (if (or (and (< y mn) (< dy 0))
             (and (> y mx) (> dy 0)))
-      (update-in m [:angle] -)
+      (-> m
+       (update-in [:angle] -)
+       (update-in [:speed] (partial + (:speed-bump params))))
       m)))
 
 (defn overlap-ranges?
@@ -160,11 +167,24 @@
 
 (defn bounce-paddle [m]
   "Changes direction based on paddle collided with."
-  (let [[dx] (calc-ball-delta m)]
-    (if (or (and (< dx 0) (overlap-rects? @ball @left-paddle))
-            (and (> dx 0) (overlap-rects? @ball @right-paddle)))
-      (update-in m [:angle] #(- (+ % Math/PI)))
-      m)))
+  (let [[dx] (calc-ball-delta m)
+        ball-center (center-y m)
+        left-diff (- (center-y @left-paddle) ball-center)
+        right-diff (- (center-y @right-paddle) ball-center)]
+    (cond
+     (and (< dx 0) (overlap-rects? @ball @left-paddle))
+     (-> m
+      (update-in [:angle]
+                 #(+ (- (+ % Math/PI)) (/ left-diff (:height @left-paddle))))
+      (update-in [:speed] (partial + (:speed-bump params))))
+     
+     (and (> dx 0) (overlap-rects? @ball @right-paddle))
+     (-> m
+         (update-in [:angle]
+                    #(- (- (+ % Math/PI)) (/ right-diff (:height @right-paddle))))
+         (update-in [:speed] (partial + (:speed-bump params))))
+     
+     :else m)))
 
 (defn maybe-reset-ball [m]
   "Put the ball back in the center if it's offscreen."
