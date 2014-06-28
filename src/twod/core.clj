@@ -31,15 +31,9 @@
   "Return the y coordinate of the center of a rectangle"
   (->> rect bounds-y (reduce +) (* 0.5)))
 
-(def loc (juxt :x :y))
-(defn set-loc [m loc]
-  "Set the x and y values in map m to the location"
-  (apply (partial assoc m) (interleave [:x :y] loc)))
 (defn update-loc [m delta]
   "Update the x and y values in map m by adding delta"
-  (->> (interleave [:x :y] delta)
-       (partition 2)
-       (reduce #(update-in % [(first %2)] + (second %2)) m)))
+  (merge-with + m (zipmap [:x :y] delta)))
 
 (def left-score (atom 0))
 (def right-score (atom 0))
@@ -66,12 +60,12 @@
   ([x-bounds y-bounds position]
      (let [[min-x max-x] x-bounds
            [min-y max-y] y-bounds
-           [x y] position
+           {x :x y :y} position
            bound (fn [a-min a-max value]
                    (max a-min (min a-max value)))
            new-x (bound min-x max-x x)
            new-y (bound min-y max-y y)]
-       (vector new-x new-y))))
+       (assoc position :x new-x :y new-y))))
 
 (defn setup []
   (smooth)
@@ -123,11 +117,10 @@
         valid-key (valid-keys paddle-side)
         move (moves (get valid-key the-key-pressed :still))]
     (swap! paddle #(update-loc % move))
-    (swap! paddle #(set-loc %
-                            (normalise
-                             (map - screen-bounds-x [0 (:width %)])
-                             (map - screen-bounds-y [0 (:height %)])
-                             (loc %))))))
+    (swap! paddle #(normalise
+                   (map - screen-bounds-x [0 (:width %)])
+                   (map - screen-bounds-y [0 (:height %)])
+                   %))))
 
 (defn key-press []
   (let [raw-key (raw-key)
