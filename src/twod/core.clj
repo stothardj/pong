@@ -4,7 +4,8 @@
            (java.util.concurrent Executors TimeUnit)))
 
 (def params {
-             :screen-dimensions [400 400]
+             :screen-width 800
+             :screen-height 600
              :background-colour 0
              :foreground-colour 255
              :paddle-height 50
@@ -13,15 +14,15 @@
              :start-speed 2
              :speed-bump 0.3})
 
-(def screen-bounds-x [0 (first (:screen-dimensions params))])
-(def screen-bounds-y [0 (second (:screen-dimensions params))])
+(def screen-bounds-x [0 (:screen-width params)])
+(def screen-bounds-y [0 (:screen-height params)])
 
 (def left-paddle (atom {:x 20
-                        :y 190
+                        :y (-> params :screen-height (/ 2))
                         :width (:paddle-width params)
                         :height (:paddle-height params)}))
-(def right-paddle (atom {:x (- (first (:screen-dimensions params)) 20)
-                         :y 190
+(def right-paddle (atom {:x (-> params :screen-width (- 20))
+                         :y (-> params :screen-height (/ 2))
                          :width (:paddle-width params)
                          :height (:paddle-height params)}))
 
@@ -46,8 +47,8 @@
   (rand (* 2 Math/PI)))
 
 (defn new-ball []
-  {:x 200
-   :y 200
+  {:x (-> params :screen-width (/ 2))
+   :y (-> params :screen-height (/ 2))
    :width (:ball-radius params)
    :height (:ball-radius params)
    :speed (:start-speed params)
@@ -83,9 +84,9 @@
   (->> @ball
        ((juxt :x :y :width :height))
        (apply rect))
-  (text "Use WS and arrow keys to move" 10 390)
+  (text "Use WS and arrow keys to move" 10 (-> params :screen-height (- 10)))
   (text (str @left-score) 20 20)
-  (text (str @right-score) (- (second screen-bounds-x) 20) 20))
+  (text (str @right-score) (-> params :screen-width (- 20)) 20))
 
 (def valid-keys-left {\w :up
                       \s :down})
@@ -202,7 +203,7 @@
                                      TimeUnit/MILLISECONDS)]
     (defsketch key-listener
       :title "Pong"
-      :size (params :screen-dimensions)
+      :size ((juxt :screen-width :screen-height) params)
       :setup setup
       :draw draw
       :key-pressed #'key-press
