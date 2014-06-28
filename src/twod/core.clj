@@ -36,6 +36,7 @@
   "Update the x and y values in map m by adding delta"
   (merge-with + m (zipmap [:x :y] delta)))
 
+(def game-started (atom false))
 (def left-score (atom 0))
 (def right-score (atom 0))
 
@@ -75,18 +76,25 @@
 
 (defn draw
   []
-  (background-float (params :background-colour))
-  (fill (params :foreground-colour))
-  (doseq [paddle (vals paddles)]
-    (->> @paddle
-         ((juxt :x :y :width :height))
-         (apply rect)))
-  (->> @ball
-       ((juxt :x :y :width :height))
-       (apply rect))
-  (text "Use WS and arrow keys to move" 10 (-> params :screen-height (- 10)))
-  (text (str @left-score) 20 20)
-  (text (str @right-score) (-> params :screen-width (- 20)) 20))
+  (if @game-started
+    (do
+      (background-float (params :background-colour))
+      (fill (params :foreground-colour))
+      (doseq [paddle (vals paddles)]
+        (->> @paddle
+             ((juxt :x :y :width :height))
+             (apply rect)))
+      (->> @ball
+           ((juxt :x :y :width :height))
+           (apply rect))
+      (text "Use WS and arrow keys to move" 10 (-> params :screen-height (- 10)))
+      (text (str @left-score) 20 20)
+      (text (str @right-score) (-> params :screen-width (- 20)) 20))
+    (do
+      (background-float (params :background-colour))
+      (fill (params :foreground-colour))
+      (text "Pong" 20 40)
+      (text "Press any key to play" 20 60))))
 
 (def valid-keys-left {\w :up
                       \s :down})
@@ -123,11 +131,24 @@
                    (map - screen-bounds-y [0 (:height %)])
                    %))))
 
-(defn key-press []
-  (let [raw-key (raw-key)
-        the-key-code (key-code)
-        the-key-pressed (if (= processing.core.PConstants/CODED (int raw-key)) the-key-code raw-key)]
-    (doseq [side [:left :right]] (maybe-move side the-key-pressed))))
+(def handle (atom nil))
+
+(declare game-loop)
+(defn start-game [executor]
+  (reset! game-started true)
+  (reset! handle (.scheduleAtFixedRate executor
+                         game-loop
+                         20
+                         20
+                         TimeUnit/MILLISECONDS)))
+
+(defn key-press [executor]
+  (if-not @game-started
+    (start-game executor)
+    (let [raw-key (raw-key)
+          the-key-code (key-code)
+          the-key-pressed (if (= processing.core.PConstants/CODED (int raw-key)) the-key-code raw-key)]
+      (doseq [side [:left :right]] (maybe-move side the-key-pressed)))))
 
 (defn move [m]
   "Changes location based on speed and angle."
@@ -195,18 +216,13 @@
   (swap! ball maybe-reset-ball))
 
 (defn -main [& args]
-  (let [executor (Executors/newScheduledThreadPool 1)
-        handle (.scheduleAtFixedRate executor
-                                     #'game-loop
-                                     20
-                                     20
-                                     TimeUnit/MILLISECONDS)]
+  (let [executor (Executors/newScheduledThreadPool 1)]
     (defsketch key-listener
       :title "Pong"
       :size ((juxt :screen-width :screen-height) params)
       :setup setup
       :draw draw
-      :key-pressed #'key-press
+      :key-pressed #(key-press executor)
       :on-close (fn []
-                  (.cancel handle true)
+                  (when @handle (.cancel @handle true))
                   (.shutdownNow executor)))))
