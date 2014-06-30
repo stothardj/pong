@@ -115,6 +115,7 @@
 (defn charcode-to-keyword [c] (->> c str keyword))
 
 (defn calc-delta [speed angle]
+  "The amount of movement in [dx dy]"
   (->> angle
        ((juxt cos #(- (sin %))))
        (map (partial * speed))))
