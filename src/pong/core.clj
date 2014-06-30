@@ -74,27 +74,29 @@
   (no-stroke)
   (frame-rate 30))
 
+(defn draw-game []
+  (background-float (params :background-colour))
+  (fill (params :foreground-colour))
+  (doseq [paddle (vals paddles)]
+    (->> @paddle
+         ((juxt :x :y :width :height))
+         (apply rect)))
+  (->> @ball
+       ((juxt :x :y :width :height))
+       (apply rect))
+  (text "Use WS and arrow keys to move" 10 (-> params :screen-height (- 10)))
+  (text (str @left-score) 20 20)
+  (text (str @right-score) (-> params :screen-width (- 20)) 20))
+
+(defn draw-start []
+  (background-float (params :background-colour))
+  (fill (params :foreground-colour))
+  (text "Pong" 20 40)
+  (text "Press any key to play" 20 60))
+
 (defn draw
   []
-  (if @game-started
-    (do
-      (background-float (params :background-colour))
-      (fill (params :foreground-colour))
-      (doseq [paddle (vals paddles)]
-        (->> @paddle
-             ((juxt :x :y :width :height))
-             (apply rect)))
-      (->> @ball
-           ((juxt :x :y :width :height))
-           (apply rect))
-      (text "Use WS and arrow keys to move" 10 (-> params :screen-height (- 10)))
-      (text (str @left-score) 20 20)
-      (text (str @right-score) (-> params :screen-width (- 20)) 20))
-    (do
-      (background-float (params :background-colour))
-      (fill (params :foreground-colour))
-      (text "Pong" 20 40)
-      (text "Press any key to play" 20 60))))
+  (if @game-started (draw-game) (draw-start)))
 
 (def valid-keys-left {\w :up
                       \s :down})
