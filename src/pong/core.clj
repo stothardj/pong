@@ -1,4 +1,4 @@
-(ns twod.core
+(ns pong.core
   (:require [quil.core :refer :all])
   (:import java.awt.event.KeyEvent
            (java.util.concurrent Executors TimeUnit)))

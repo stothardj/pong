@@ -1,14 +1,14 @@
-# twod
+# pong
 
-A Clojure library designed to ... well, that part is up to you.
+A Clojure pong game to learn how to use quil.
 
 ## Usage
 
-FIXME
+If you have leinengen then you can run "lein run".
+Jar may be provided at a later date.
 
 ## License
 
-Copyright © 2014 FIXME
+Copyright © 2014 Jake Stothard
 
-Distributed under the Eclipse Public License either version 1.0 or (at
-your option) any later version.
+Distributed under the Apache Licence, Version 2.0.

@@ -1,6 +1,6 @@
-(ns twod.core-test
+(ns pong.core-test
   (:require [clojure.test :refer :all]
-            [twod.core :refer :all]
+            [pong.core :refer :all]
             [quil.core :refer [atan2 abs]]))
 
 (defn float=
