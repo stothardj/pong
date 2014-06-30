@@ -26,8 +26,14 @@
                          :width (:paddle-width params)
                          :height (:paddle-height params)}))
 
-(def bounds-x (juxt :x #(->> % ((juxt :x :width)) (reduce +))))
-(def bounds-y (juxt :y #(->> % ((juxt :y :height)) (reduce +))))
+(defn bounds-x [m]
+  "Return [left right] of a {:x :width} map"
+  (let [{:keys [x width]} m] [x (+ x width)]))
+
+(defn bounds-y [m]
+  "Return [top bottom] of a {:y :height} map"
+  (let [{:keys [y height]} m] [y (+ y height)]))
+
 (defn center-y [rect]
   "Return the y coordinate of the center of a rectangle"
   (->> rect bounds-y (reduce +) (* 0.5)))
