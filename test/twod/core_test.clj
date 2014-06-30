@@ -50,8 +50,28 @@
   (testing "Bounces off top"
     (is (= -0.1 (:angle (bounce-wall {:x 5 :y -1 :angle 0.1 :speed 1})))))
   (testing "Bounces off bottom"
-    (is (= 0.1 (:angle (bounce-wall {:x 5 :y (inc (second screen-bounds-y)) :angle -0.1 :speed 1})))))
+    (is (= 0.1 (:angle (bounce-wall {:x 5 :y (inc (second screen-bounds-y))
+                                     :angle -0.1 :speed 1})))))
   (testing "Doesnt reverse bounce at top"
     (is (= -0.1 (:angle (bounce-wall {:x 5 :y -1 :angle -0.1 :speed 1})))))
   (testing "Doesnt reverse bounce at bottom"
-    (is (= 0.1 (:angle (bounce-wall {:x 5 :y (inc (second screen-bounds-y)) :angle 0.1 :speed 1}))))))
+    (is (= 0.1 (:angle (bounce-wall {:x 5 :y (inc (second screen-bounds-y))
+                                     :angle 0.1 :speed 1}))))))
+
+(deftest test-overlap-ranges
+  (is (overlap-ranges? [1 3] [2 4]))
+  (is (overlap-ranges? [1 4] [2 3]))
+  (is (not (overlap-ranges? [1 2] [3 4])))
+  (is (not (overlap-ranges? [3 4] [1 2]))))
+
+(deftest test-overlap-rects
+  (is (overlap-rects? {:x 3 :y 7 :width 10 :height 12}
+                      {:x 7 :y 18 :width 5 :height 3}))
+  (is (not (overlap-rects? {:x 3 :y 7 :width 10 :height 12}
+                           {:x 7 :y 20 :width 5 :height 3}))))
+
+(deftest test-maybe-reset-ball
+  (is (= 3 (:x (maybe-reset-ball {:x 3}))))
+  (is (not (= -1 (:x (maybe-reset-ball {:x -1})))))
+  (is (not (= (inc (second screen-bounds-x))
+              (:x (maybe-reset-ball {:x (inc (second screen-bounds-x))}))))))
