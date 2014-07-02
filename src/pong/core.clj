@@ -8,6 +8,7 @@
              :screen-height 600
              :background-colour 0
              :foreground-colour 255
+             :max-points 3
              :paddle-height 50
              :paddle-width 5
              :ball-radius 4
@@ -26,23 +27,27 @@
                          :width (:paddle-width params)
                          :height (:paddle-height params)}))
 
-(defn bounds-x [m]
+(defn bounds-x
   "Return [left right] of a {:x :width} map"
+  [m]
   (let [{:keys [x width]} m] [x (+ x width)]))
 
-(defn bounds-y [m]
+(defn bounds-y 
   "Return [top bottom] of a {:y :height} map"
+  [m]
   (let [{:keys [y height]} m] [y (+ y height)]))
 
-(defn center-y [rect]
+(defn center-y
   "Return the y coordinate of the center of a rectangle"
+  [rect]
   (->> rect bounds-y (reduce +) (* 0.5)))
 
-(defn update-loc [m delta]
+(defn update-loc
   "Update the x and y values in map m by adding delta"
+  [m delta]
   (merge-with + m (zipmap [:x :y] delta)))
 
-(def game-started (atom false))
+(def game-state (atom :start-screen))
 (def left-score (atom 0))
 (def right-score (atom 0))
 
@@ -53,13 +58,18 @@
 (defn rand-angle []
   (rand (* 2 Math/PI)))
 
+(defn start-angle
+  "Random angle which will atleat have some horizontal movement."
+  []
+  (->> rand-angle repeatedly (filter #(< 0.1 (abs (cos %)))) first))
+
 (defn new-ball []
   {:x (-> params :screen-width (/ 2))
    :y (-> params :screen-height (/ 2))
    :width (:ball-radius params)
    :height (:ball-radius params)
    :speed (:start-speed params)
-   :angle (rand-angle)})
+   :angle (start-angle)})
 
 (def ball (atom (new-ball)))
 
@@ -80,16 +90,15 @@
   (no-stroke)
   (frame-rate 30))
 
+(defn draw-rect [m]
+  (->> m ((juxt :x :y :width :height)) (apply rect)))
+
 (defn draw-game []
   (background-float (params :background-colour))
   (fill (params :foreground-colour))
   (doseq [paddle (vals paddles)]
-    (->> @paddle
-         ((juxt :x :y :width :height))
-         (apply rect)))
-  (->> @ball
-       ((juxt :x :y :width :height))
-       (apply rect))
+    (draw-rect @paddle))
+  (draw-rect @ball)
   (text "Use WS and arrow keys to move" 10 (-> params :screen-height (- 10)))
   (text (str @left-score) 20 20)
   (text (str @right-score) (-> params :screen-width (- 20)) 20))
@@ -98,11 +107,11 @@
   (background-float (params :background-colour))
   (fill (params :foreground-colour))
   (text "Pong" 20 40)
-  (text "Press any key to play" 20 60))
+  (fill 255 0 0)
+  (text "Two Player" 20 60))
 
-(defn draw
-  []
-  (if @game-started (draw-game) (draw-start)))
+(defn draw []
+  (if (= :start-screen @game-state) (draw-start) (draw-game)))
 
 (def valid-keys-left {\w :up
                       \s :down})
@@ -122,8 +131,9 @@
 
 (defn charcode-to-keyword [c] (->> c str keyword))
 
-(defn calc-delta [speed angle]
+(defn calc-delta
   "The amount of movement in [dx dy]"
+  [speed angle]
   (->> angle
        ((juxt cos #(- (sin %))))
        (map (partial * speed))))
@@ -143,28 +153,51 @@
 (def handle (atom nil))
 
 (declare game-loop)
-(defn start-game [executor]
-  (reset! game-started true)
-  (reset! handle (.scheduleAtFixedRate executor
-                         game-loop
-                         20
-                         20
-                         TimeUnit/MILLISECONDS)))
+(defn start-game
+  "Start a new pong game."
+  [executor]
+  (reset! game-state :two-player)
+  (reset! left-score 0)
+  (reset! right-score 0)
+  (reset! ball (new-ball))
+  (reset! left-paddle {:x 20
+                       :y (-> params :screen-height (/ 2))
+                       :width (:paddle-width params)
+                       :height (:paddle-height params)})
+  (reset! right-paddle {:x (-> params :screen-width (- 20))
+                        :y (-> params :screen-height (/ 2))
+                        :width (:paddle-width params)
+                        :height (:paddle-height params)})
+  (compare-and-set! handle nil
+                    (.scheduleAtFixedRate executor
+                                          game-loop
+                                          20
+                                          20
+                                          TimeUnit/MILLISECONDS)))
+
+(defn stop-game
+  "Stop the currently running pong game."
+  []
+  (when @handle
+    (.cancel @handle true)
+    (reset! handle nil)))
 
 (defn key-press [executor]
-  (if-not @game-started
+  (if (= :start-screen @game-state)
     (start-game executor)
     (let [raw-key (raw-key)
           the-key-code (key-code)
           the-key-pressed (if (= processing.core.PConstants/CODED (int raw-key)) the-key-code raw-key)]
       (doseq [side [:left :right]] (maybe-move side the-key-pressed)))))
 
-(defn move [m]
+(defn move
   "Changes location based on speed and angle."
+  [m]
   (update-loc m (calc-ball-delta m)))
 
-(defn bounce-wall [m]
+(defn bounce-wall
   "Changes direction based on wall collided with."
+  [m]
   (let [[_ dy] (calc-ball-delta m)
         y (:y m)
         [mn mx] screen-bounds-y]
@@ -189,8 +222,9 @@
   (and (overlap-ranges? (bounds-x a) (bounds-x b))
        (overlap-ranges? (bounds-y a) (bounds-y b))))
 
-(defn bounce-paddle [m]
+(defn bounce-paddle
   "Changes direction based on paddle collided with."
+  [m]
   (let [[dx] (calc-ball-delta m)
         ball-center (center-y m)
         left-diff (- (center-y @left-paddle) ball-center)
@@ -210,8 +244,19 @@
      
      :else m)))
 
-(defn maybe-reset-ball [m]
+(defn start-screen
+  "Transition to the start screen."
+  []
+  (stop-game)
+  (reset! game-state :start-screen))
+
+(defn game-over? []
+  (let [max-points (:max-points params)]
+    (or (= @left-score max-points) (= @right-score max-points))))
+
+(defn maybe-reset-ball
   "Put the ball back in the center if it's offscreen."
+  [m]
   (let [x (:x m)
         [mn mx] screen-bounds-x]
     (cond (< x mn) (do (swap! right-score inc) (new-ball))
@@ -222,7 +267,8 @@
   (swap! ball move)
   (swap! ball bounce-wall)
   (swap! ball bounce-paddle)
-  (swap! ball maybe-reset-ball))
+  (swap! ball maybe-reset-ball)
+  (when (game-over?) (start-screen)))
 
 (defn -main [& args]
   (let [executor (Executors/newScheduledThreadPool 1)]
@@ -233,5 +279,5 @@
       :draw draw
       :key-pressed #(key-press executor)
       :on-close (fn []
-                  (when @handle (.cancel @handle true))
+                  (stop-game)
                   (.shutdownNow executor)))))
