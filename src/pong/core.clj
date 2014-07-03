@@ -55,7 +55,7 @@
   {:left left-paddle
    :right right-paddle})
 
-(defn rand-angle []
+(defn- rand-angle []
   (rand (* 2 Math/PI)))
 
 (defn start-angle
@@ -182,13 +182,21 @@
     (.cancel @handle true)
     (reset! handle nil)))
 
+(defn key-press-start-screen
+  [executor]
+  (start-game executor))
+
+(defn key-press-two-player
+  []
+  (let [raw-key (raw-key)
+        the-key-code (key-code)
+        the-key-pressed (if (= processing.core.PConstants/CODED (int raw-key)) the-key-code raw-key)]
+    (doseq [side [:left :right]] (maybe-move side the-key-pressed))))
+
 (defn key-press [executor]
   (if (= :start-screen @game-state)
-    (start-game executor)
-    (let [raw-key (raw-key)
-          the-key-code (key-code)
-          the-key-pressed (if (= processing.core.PConstants/CODED (int raw-key)) the-key-code raw-key)]
-      (doseq [side [:left :right]] (maybe-move side the-key-pressed)))))
+    (key-press-start-screen executor)
+    (key-press-two-player)))
 
 (defn move
   "Changes location based on speed and angle."
