@@ -1,5 +1,6 @@
 (ns pong.core
-  (:require [quil.core :refer :all])
+  (:require [quil.core :refer :all]
+            [pong.menu :as menu])
   (:import java.awt.event.KeyEvent
            (java.util.concurrent Executors TimeUnit)))
 
@@ -26,6 +27,8 @@
                          :y (-> params :screen-height (/ 2))
                          :width (:paddle-width params)
                          :height (:paddle-height params)}))
+
+(def start-menu (atom (menu/menu :one-player "One Player" :two-player "Two Player" :quit "Quit")))
 
 (defn bounds-x
   "Return [left right] of a {:x :width} map"
@@ -107,8 +110,11 @@
   (background-float (params :background-colour))
   (fill (params :foreground-colour))
   (text "Pong" 20 40)
-  (fill 255 0 0)
-  (text "Two Player" 20 60))
+  (doseq [[idx option] (menu/options-indexed @start-menu)]
+    (let [selected (-> option meta :selected)]
+      (when selected (fill 255 0 0))
+      (text (second option) 20 (+ 60 (* 20 idx)))
+      (when selected (fill (params :foreground-colour))))))
 
 (defn draw []
   (if (= :start-screen @game-state) (draw-start) (draw-game)))
@@ -182,16 +188,20 @@
     (.cancel @handle true)
     (reset! handle nil)))
 
+(defn- get-key
+  "Returns the current key-code, or raw-key if that is unavailable."
+  []
+  (let [raw-key (raw-key)
+        the-key-code (key-code)]
+    (if (= processing.core.PConstants/CODED (int raw-key)) the-key-code raw-key)))
+
 (defn key-press-start-screen
   [executor]
   (start-game executor))
 
 (defn key-press-two-player
   []
-  (let [raw-key (raw-key)
-        the-key-code (key-code)
-        the-key-pressed (if (= processing.core.PConstants/CODED (int raw-key)) the-key-code raw-key)]
-    (doseq [side [:left :right]] (maybe-move side the-key-pressed))))
+  (doseq [side [:left :right]] (maybe-move side (get-key))))
 
 (defn key-press [executor]
   (if (= :start-screen @game-state)
