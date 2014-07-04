@@ -196,17 +196,28 @@
     (if (= processing.core.PConstants/CODED (int raw-key)) the-key-code raw-key)))
 
 (defn key-press-start-screen
-  [executor]
-  (start-game executor))
+  [key executor]
+  (when-let [action ({\w :up
+                      \s :down
+                      KeyEvent/VK_UP :up
+                      KeyEvent/VK_DOWN :down
+                      \newline :select
+                      \space :select
+                      \a :select} key)]
+    (case action
+      :up (swap! start-menu menu/select-prev)
+      :down (swap! start-menu menu/select-next)
+      :select (start-game executor))))
 
 (defn key-press-two-player
-  []
-  (doseq [side [:left :right]] (maybe-move side (get-key))))
+  [key]
+  (doseq [side [:left :right]] (maybe-move side key)))
 
 (defn key-press [executor]
-  (if (= :start-screen @game-state)
-    (key-press-start-screen executor)
-    (key-press-two-player)))
+  (let [key (get-key)]
+    (if (= :start-screen @game-state)
+      (key-press-start-screen key executor)
+      (key-press-two-player key))))
 
 (defn move
   "Changes location based on speed and angle."
