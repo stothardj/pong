@@ -229,7 +229,7 @@
   (case (first option)
     :one-player (start-game executor :one-player)
     :two-player (start-game executor :two-player)
-    :quit nil))
+    :quit (System/exit 0)))
 
 (defn key-press-start-screen
   [key executor]
