@@ -4,7 +4,7 @@
   (:import java.awt.event.KeyEvent
            (java.util.concurrent Executors TimeUnit)))
 
-(def params {
+(def params {:ai-speed 8
              :screen-width 800
              :screen-height 600
              :background-colour 0
@@ -12,9 +12,9 @@
              :max-points 3
              :paddle-height 50
              :paddle-width 5
-             :ball-radius 4
-             :start-speed 2
-             :speed-bump 0.3})
+             :ball-radius 8
+             :start-speed 4
+             :speed-bump 0.5})
 
 (def screen-bounds-x [0 (:screen-width params)])
 (def screen-bounds-y [0 (:screen-height params)])
@@ -28,7 +28,11 @@
                          :width (:paddle-width params)
                          :height (:paddle-height params)}))
 
-(def start-menu (atom (menu/menu :one-player "One Player" :two-player "Two Player" :quit "Quit")))
+(def start-menu
+  (atom (menu/menu
+         :one-player "One Player"
+         :two-player "Two Player"
+         :quit "Quit")))
 
 (defn bounds-x
   "Return [left right] of a {:x :width} map"
@@ -39,6 +43,11 @@
   "Return [top bottom] of a {:y :height} map"
   [m]
   (let [{:keys [y height]} m] [y (+ y height)]))
+
+(defn center-x
+  "Return the x coordinate of the center of a rectangle"
+  [rect]
+  (->> rect bounds-x (reduce +) (* 0.5)))
 
 (defn center-y
   "Return the y coordinate of the center of a rectangle"
@@ -64,7 +73,7 @@
 (defn start-angle
   "Random angle which will atleat have some horizontal movement."
   []
-  (->> rand-angle repeatedly (filter #(< 0.1 (abs (cos %)))) first))
+  (->> rand-angle repeatedly (filter #(< 0.3 (abs (cos %)))) first))
 
 (defn new-ball []
   {:x (-> params :screen-width (/ 2))
@@ -76,14 +85,17 @@
 
 (def ball (atom (new-ball)))
 
+(defn- bound
+  "Restrict value to be between min and max."
+  [a-min a-max value]
+  (max a-min (min a-max value)))
+
 (defn normalise
   ([bounds position] (normalise bounds bounds position))
   ([x-bounds y-bounds position]
      (let [[min-x max-x] x-bounds
            [min-y max-y] y-bounds
            {x :x y :y} position
-           bound (fn [a-min a-max value]
-                   (max a-min (min a-max value)))
            new-x (bound min-x max-x x)
            new-y (bound min-y max-y y)]
        (assoc position :x new-x :y new-y))))
@@ -146,23 +158,36 @@
 
 (defn calc-ball-delta [m] (apply calc-delta ((juxt :speed :angle) m)))
 
-(defn maybe-move [paddle-side the-key-pressed]
+(defn move-paddle [paddle move]
+  (swap! paddle #(update-loc % move))
+  (swap! paddle #(normalise
+                  (map - screen-bounds-x [0 (:width %)])
+                  (map - screen-bounds-y [0 (:height %)])
+                  %)))
+
+(defn human-move [paddle-side the-key-pressed]
   (let [paddle (paddles paddle-side)
         valid-key (valid-keys paddle-side)
         move (moves (get valid-key the-key-pressed :still))]
-    (swap! paddle #(update-loc % move))
-    (swap! paddle #(normalise
-                   (map - screen-bounds-x [0 (:width %)])
-                   (map - screen-bounds-y [0 (:height %)])
-                   %))))
+    (move-paddle paddle move)))
+
+(defn ai-move [paddle-side]
+  (let [paddle (paddles paddle-side)
+        ball-x (center-x @ball)
+        ball-y (center-y @ball)
+        paddle-x (center-x @paddle)
+        paddle-y (center-y @paddle)
+        move [0 (bound (- (:ai-speed params)) (:ai-speed params) (- ball-y paddle-y))]]
+    (when (< (abs (- paddle-x ball-x)) (-> params :screen-width (/ 2)))
+      (move-paddle paddle move))))
 
 (def handle (atom nil))
 
 (declare game-loop)
 (defn start-game
   "Start a new pong game."
-  [executor]
-  (reset! game-state :two-player)
+  [executor mode]
+  (reset! game-state mode)
   (reset! left-score 0)
   (reset! right-score 0)
   (reset! ball (new-ball))
@@ -195,6 +220,12 @@
         the-key-code (key-code)]
     (if (= processing.core.PConstants/CODED (int raw-key)) the-key-code raw-key)))
 
+(defn select-action [option executor]
+  (case (first option)
+    :one-player (start-game executor :one-player)
+    :two-player (start-game executor :two-player)
+    :quit nil))
+
 (defn key-press-start-screen
   [key executor]
   (when-let [action ({\w :up
@@ -207,17 +238,22 @@
     (case action
       :up (swap! start-menu menu/select-prev)
       :down (swap! start-menu menu/select-next)
-      :select (start-game executor))))
+      :select (select-action (menu/selected @start-menu) executor))))
+
+(defn key-press-one-player
+  [key]
+  (human-move :left key))
 
 (defn key-press-two-player
   [key]
-  (doseq [side [:left :right]] (maybe-move side key)))
+  (doseq [side [:left :right]] (human-move side key)))
 
 (defn key-press [executor]
   (let [key (get-key)]
-    (if (= :start-screen @game-state)
-      (key-press-start-screen key executor)
-      (key-press-two-player key))))
+    (case @game-state
+      :start-screen (key-press-start-screen key executor)
+      :one-player (key-press-one-player key)
+      :two-player (key-press-two-player key))))
 
 (defn move
   "Changes location based on speed and angle."
@@ -297,11 +333,12 @@
   (swap! ball bounce-wall)
   (swap! ball bounce-paddle)
   (swap! ball maybe-reset-ball)
+  (when (= :one-player @game-state) (ai-move :right))
   (when (game-over?) (start-screen)))
 
 (defn -main [& args]
   (let [executor (Executors/newScheduledThreadPool 1)]
-    (defsketch key-listener
+    (sketch
       :title "Pong"
       :size ((juxt :screen-width :screen-height) params)
       :setup setup
