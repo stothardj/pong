@@ -5,6 +5,7 @@
            (java.util.concurrent Executors TimeUnit)))
 
 (def params {:ai-speed 8
+             :human-speed 7
              :screen-width 800
              :screen-height 600
              :background-colour 0
@@ -27,6 +28,9 @@
                          :y (-> params :screen-height (/ 2))
                          :width (:paddle-width params)
                          :height (:paddle-height params)}))
+
+(def keys-pressed (atom #{}))
+(def important-keys #{KeyEvent/VK_UP KeyEvent/VK_DOWN \w \s})
 
 (def start-menu
   (atom (menu/menu
@@ -141,10 +145,8 @@
   {:left valid-keys-left
    :right valid-keys-right})
 
-(def moves {:up [0 -10]
-            :down [0 10]
-            :left [-10 0]
-            :right [10 0]
+(def moves {:up [0 (-> params :human-speed -)]
+            :down [0 (:human-speed params)]
             :still [0 0]})
 
 (defn charcode-to-keyword [c] (->> c str keyword))
@@ -165,10 +167,13 @@
                   (map - screen-bounds-y [0 (:height %)])
                   %)))
 
-(defn human-move [paddle-side the-key-pressed]
+(defn human-move [paddle-side]
   (let [paddle (paddles paddle-side)
         valid-key (valid-keys paddle-side)
-        move (moves (get valid-key the-key-pressed :still))]
+        paddle-keys-pressed (filter @keys-pressed (keys valid-key))
+        move (moves (if (= 1 (count paddle-keys-pressed))
+                      (get valid-key (first paddle-keys-pressed) :still)
+                      :still))]
     (move-paddle paddle move)))
 
 (defn ai-move [paddle-side]
@@ -240,20 +245,16 @@
       :down (swap! start-menu menu/select-next)
       :select (select-action (menu/selected @start-menu) executor))))
 
-(defn key-press-one-player
-  [key]
-  (human-move :left key))
-
-(defn key-press-two-player
-  [key]
-  (doseq [side [:left :right]] (human-move side key)))
-
 (defn key-press [executor]
   (let [key (get-key)]
-    (case @game-state
-      :start-screen (key-press-start-screen key executor)
-      :one-player (key-press-one-player key)
-      :two-player (key-press-two-player key))))
+    (if (= @game-state :start-screen)
+      (key-press-start-screen key executor)
+      (when (important-keys key) (swap! keys-pressed conj key)))))
+
+(defn key-release []
+  (let [key (get-key)]
+    (when (and (not (= @game-state :start-screen)) (important-keys key))
+      (swap! keys-pressed disj key))))
 
 (defn move
   "Changes location based on speed and angle."
@@ -333,7 +334,9 @@
   (swap! ball bounce-wall)
   (swap! ball bounce-paddle)
   (swap! ball maybe-reset-ball)
-  (when (= :one-player @game-state) (ai-move :right))
+  (case @game-state
+    :one-player (do (ai-move :right) (human-move :left))
+    :two-player (doseq [side [:left :right]] (human-move side)))
   (when (game-over?) (start-screen)))
 
 (defn -main [& args]
@@ -344,6 +347,7 @@
       :setup setup
       :draw draw
       :key-pressed #(key-press executor)
+      :key-released key-release
       :on-close (fn []
                   (stop-game)
                   (.shutdownNow executor)))))
